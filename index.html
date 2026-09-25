@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Monitor</title>
+    <style>
+        * { box-sizing: border-box; }
+        :root {
+            --bg:#f2f1ec; --card:#ffffff; --border:#e9e7e1; --ink:#1d1d1b; --muted:#8b8880;
+            --faint:#a8a59d; --field:#f1efe9; --field-bd:#e4e2db;
+            --green:#2e9e63; --green-bg:#e4f3ea; --amber:#b5820c; --amber-bg:#f6edd6;
+            --orange:#c2560d; --orange-bg:#f7e7d6; --red:#c0492e; --red-bg:#f6e3de;
+            --blue:#3b6db5; --blue-bg:#e6edf6; --gray:#9a968e; --gray-bg:#edebe5;
+        }
+        body { font-family:"Segoe UI", system-ui, -apple-system, sans-serif; background:var(--bg); color:var(--ink); padding:22px; margin:0; }
+        .container { max-width:1720px; margin:0 auto; background:var(--card); padding:24px 26px; border-radius:18px; border:1px solid var(--border); }
+        /* header */
+        .header { margin-bottom:22px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+        .brand { display:flex; align-items:center; gap:12px; }
+        .logo { width:36px; height:36px; border-radius:10px; background:var(--ink); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:1.15rem; flex:none; }
+        h1 { margin:0; font-size:1.45rem; font-weight:800; letter-spacing:-0.01em; }
+        #conn { font-size:0.82rem; font-weight:700; color:var(--green); background:var(--green-bg); padding:6px 13px; border-radius:999px; white-space:nowrap; }
+        .header-actions { margin-left:auto; display:flex; gap:9px; flex-wrap:wrap; }
+        /* buttons */
+        button { border:none; padding:9px 15px; border-radius:10px; cursor:pointer; font-weight:700; font-size:13.5px; font-family:inherit; }
+        .btn-neutral { background:var(--card); border:1px solid var(--field-bd); color:var(--ink); }
+        .btn-neutral:hover { background:var(--field); }
+        .btn-neutral .tag { color:var(--muted); font-weight:700; margin-left:5px; }
+        .btn-dark { background:var(--ink); color:#fff; }
+        .btn-dark:hover { background:#000; }
+        /* stat cards */
+        .status-cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:13px; margin-bottom:22px; }
+        .card { background:var(--card); padding:16px 17px; border-radius:14px; border:1px solid var(--border); text-align:left; cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease; }
+        .card:hover { box-shadow:0 4px 14px rgba(29,29,27,0.06); }
+        .card.active { border-color:var(--ink); box-shadow:0 4px 14px rgba(29,29,27,0.08); }
+        .card-title { font-size:0.78rem; color:var(--muted); font-weight:600; margin-bottom:10px; display:flex; align-items:center; gap:7px; }
+        .dot { width:9px; height:9px; border-radius:999px; flex:none; }
+        .card-value { font-size:2.15rem; font-weight:800; color:var(--ink); line-height:1; }
+        .c-online { background:var(--green); } .c-duty { background:var(--blue); } .c-checkin { background:var(--gray); }
+        .c-break { background:var(--amber); } .c-inactive { background:var(--orange); } .c-late { background:var(--red); }
+        /* filters */
+        .filters { padding:0 0 16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; border-bottom:1px solid var(--border); }
+        .filters label { font-weight:600; color:var(--muted); font-size:13px; }
+        .filters input[type="text"] { min-width:230px; }
+        .filters select, .filters input[type="date"], .filters input[type="text"] {
+            padding:9px 12px; border:1px solid var(--field-bd); border-radius:10px; background:var(--field); font-size:13.5px; color:var(--ink); font-family:inherit; }
+        .filters input::placeholder { color:var(--faint); }
+        .seg { display:inline-flex; background:var(--field); border:1px solid var(--field-bd); border-radius:10px; padding:3px; gap:2px; }
+        .seg-btn { background:transparent; border:none; padding:6px 14px; border-radius:8px; font-weight:700; font-size:13px; color:var(--muted); cursor:pointer; }
+        .seg-btn.active { background:var(--card); color:var(--ink); box-shadow:0 1px 2px rgba(29,29,27,0.08); }
+        .staff-count { margin-left:auto; color:var(--muted); font-size:13px; font-weight:600; white-space:nowrap; }
+        /* table */
+        .table-wrapper { width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+        table { width:100%; border-collapse:collapse; margin-top:0; font-size:0.86em; min-width:960px; }
+        thead th { background:transparent; color:var(--faint); font-size:0.7rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; text-align:left; padding:6px 12px 12px; border-bottom:1px solid var(--border); position:sticky; top:0; }
+        tbody td { padding:14px 12px; text-align:left; border-bottom:1px solid var(--border); vertical-align:top; white-space:nowrap; }
+        tbody tr:hover { background:#faf9f6; }
+        .cell-date { color:var(--muted); font-weight:600; }
+        .cell-name { font-weight:700; color:var(--ink); }
+        .cell-sub { display:block; font-size:0.82em; color:var(--faint); font-weight:500; margin-top:2px; }
+        .cell-psd { color:var(--muted); font-family:"Consolas", ui-monospace, monospace; font-size:0.92em; }
+        .col-center { text-align:center; font-weight:700; }
+        /* status pills */
+        .status-online, .status-idle, .status-break, .status-offline, .status-locked, .status-timeout {
+            display:inline-block; padding:4px 11px; border-radius:999px; font-weight:700; font-size:0.82em; white-space:nowrap; }
+        .status-online { color:var(--green); background:var(--green-bg); }
+        .status-idle { color:var(--amber); background:var(--amber-bg); }
+        .status-break { color:var(--amber); background:var(--amber-bg); }
+        .status-offline { color:var(--gray); background:var(--gray-bg); }
+        .status-locked { color:var(--red); background:var(--red-bg); }
+        .status-timeout { color:var(--red); background:var(--red-bg); }
+        /* expandable detail cells */
+        details { border:none; padding:0; background:transparent; cursor:pointer; min-width:118px; }
+        summary { font-weight:600; outline:none; color:var(--ink); list-style:none; }
+        summary::-webkit-details-marker { display:none; }
+        .afk-list { margin-top:7px; max-height:120px; overflow-y:auto; font-size:0.86em; color:var(--muted); background:var(--field); border:1px solid var(--border); border-radius:9px; padding:8px 10px; line-height:1.6; }
+        .time-work { color:var(--green); font-weight:700; }
+        .time-break { color:var(--amber); font-weight:600; }
+        /* photo */
+        .photo-cell { text-align:center; }
+        .photo-thumb { width:38px; height:38px; object-fit:cover; border-radius:9px; border:1px solid var(--border); transition:transform .15s ease; cursor:pointer; }
+        .photo-thumb:hover { transform:scale(1.05); }
+        .photo-empty { color:var(--faint); font-size:0.8rem; }
+        .photo-modal-img { max-width:92vw; max-height:78vh; border-radius:12px; box-shadow:0 20px 40px rgba(29,29,27,0.25); }
+        .photo-modal-title { font-weight:700; margin-bottom:10px; color:var(--ink); }
+        /* modals */
+        .modal-backdrop { position:fixed; inset:0; background:rgba(29,29,27,0.4); display:none; align-items:center; justify-content:center; z-index:1000; }
+        .modal { background:var(--card); border-radius:16px; padding:22px; min-width:320px; box-shadow:0 24px 60px rgba(29,29,27,0.25); }
+        .modal-actions { display:flex; gap:8px; justify-content:flex-end; }
+        /* animated login background */
+        #login-gate { overflow:hidden; }
+        #login-bg { position:absolute; inset:0; width:100%; height:100%; display:block; z-index:1; }
+        #login-gate::before, #login-gate::after { content:""; position:absolute; border-radius:50%; filter:blur(90px); opacity:0.55; z-index:0; pointer-events:none; }
+        #login-gate::before { width:540px; height:540px; background:radial-gradient(circle, rgba(46,158,99,0.40), transparent 70%); top:-130px; left:-110px; animation:auroraA 18s ease-in-out infinite; }
+        #login-gate::after { width:480px; height:480px; background:radial-gradient(circle, rgba(181,130,12,0.30), transparent 70%); bottom:-150px; right:-100px; animation:auroraB 22s ease-in-out infinite; }
+        @keyframes auroraA { 0%,100%{transform:translate(0,0)} 50%{transform:translate(90px,70px)} }
+        @keyframes auroraB { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-80px,-55px)} }
+        .login-card { position:relative; z-index:2; }
+        .login-label { display:block; text-align:left; font-size:12px; font-weight:700; color:#8b8880; margin:0 0 5px 2px; }
+        .ip-chip { display:inline-flex; align-items:center; gap:7px; background:var(--field); border:1px solid var(--field-bd); color:var(--ink); border-radius:999px; padding:5px 8px 5px 12px; font-size:13px; font-weight:600; font-family:"Consolas", ui-monospace, monospace; margin:0 6px 6px 0; }
+        .ip-x { cursor:pointer; color:var(--faint); font-weight:800; font-size:15px; line-height:1; padding:0 2px; }
+        .ip-x:hover { color:var(--red); }
+        /* control buttons */
+        .btn-lock { background:var(--card); color:var(--ink); border:1px solid var(--field-bd); padding:6px 15px; border-radius:9px; cursor:pointer; font-weight:700; }
+        .btn-lock:hover { background:var(--field); }
+        .btn-unlock { background:var(--ink); color:#fff; border:none; padding:6px 15px; border-radius:9px; cursor:pointer; font-weight:700; }
+        .btn-unlock:hover { background:#000; }
+        @media (max-width: 768px) {
+            body { padding:10px; } .container { padding:16px; } h1 { font-size:1.25rem; }
+            .header-actions { margin-left:0; width:100%; }
+            .filters { flex-direction:column; align-items:stretch; gap:8px; }
+            .filters input, .filters select, .filters .seg { width:100%; box-sizing:border-box; }
+            .staff-count { margin-left:0; }
+            .status-cards { grid-template-columns:1fr 1fr; gap:9px; } .card { padding:12px; } .card-value { font-size:1.7rem; }
+            tbody td { padding:10px 8px; }
+        }
+    </style>
+    <script>
+        // ====== CONFIG — reads directly from Supabase, no PythonAnywhere ======
+        const SUPABASE_URL = "https://esrjzethdwdqeenzqqqs.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVzcmp6ZXRoZHdkcWVlbnpxcXFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MDUwNDQsImV4cCI6MjA5MDE4MTA0NH0.yFjsiTPQLK5bJFJN2bRnNYGA4Bgg7Femb00QnXEFkLQ";
+        const SUPABASE_TABLE = "staff_dashboard";
+        const FETCH_DAYS_BACK = 3;
+        const TIMEOUT_SECONDS = 120;      // match server: mark OFFLINE after 2 min of silence
+        const TZ_OFFSET_MIN = 7 * 60;     // Asia/Phnom_Penh = UTC+7 (no daylight saving)
+        // =====================================================================
+
+        const LATE_DAY_THRESHOLD = "08:30:00";
+        const LATE_NIGHT_THRESHOLD = "20:30:00";
+        function timeToSeconds(hms) { if (!hms || typeof hms !== 'string') return null; const parts = hms.split(':').map(n => parseInt(n, 10)); if (parts.length !== 3 || parts.some(n => Number.isNaN(n))) return null; return (parts[0] * 3600) + (parts[1] * 60) + parts[2]; }
+        function formatDuration(totalSeconds) { const secs = Math.max(0, Math.floor(totalSeconds || 0)); const h = Math.floor(secs / 3600); const m = Math.floor((secs % 3600) / 60); const s = secs % 60; if (h > 0) return `${h}h ${m}m ${s}s`; return `${m}m ${s}s`; }
+        let allData = {}; let adminLocks = {}; let currentStatusFilter = null; let currentGroupsJson = "[]";
+        function escapeHtml(value) { return String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;"); }
+
+        // ---- Phnom Penh time helpers (records store naive local time) ----
+        function ppDateDaysAgo(n) { const d = new Date(Date.now() + TZ_OFFSET_MIN*60000 - n*86400000); return d.toISOString().slice(0,10); }
+        function ppTodayStr() { return ppDateDaysAgo(0); }
+        function secondsSince(iso) {
+            if (!iso) return Infinity;
+            const t = Date.parse(iso + "Z");              // parse the naive string as if UTC
+            if (Number.isNaN(t)) return Infinity;
+            const realEpoch = t - TZ_OFFSET_MIN*60000;    // shift it back to a real UTC instant
+            return (Date.now() - realEpoch) / 1000;
+        }
+
+        function setStatus(ok, msg) {
+            const el = document.getElementById('conn'); if (!el) return;
+            if (ok) { el.textContent = '● Live • updated ' + new Date().toLocaleTimeString();
+                      el.style.color = 'var(--green)'; el.style.background = 'var(--green-bg)'; }
+            else { el.textContent = '● Cannot reach Supabase' + (msg ? ' (' + msg + ')' : '');
+                   el.style.color = 'var(--red)'; el.style.background = 'var(--red-bg)'; }
+        }
+        function setShift(btn, v) {
+            document.getElementById('shift-filter').value = v;
+            document.querySelectorAll('#shift-seg .seg-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderTable();
+        }
+
+        function updateGroupFilter(groups) { const newGroupsJson = JSON.stringify(groups); if (newGroupsJson === currentGroupsJson) return; currentGroupsJson = newGroupsJson; const select = document.getElementById('group-filter'); if (!select) return; const current = select.value; const options = ['<option value="">All Groups</option>']; for (const g of groups) { options.push(`<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`); } select.innerHTML = options.join(''); select.value = current; }
+
+        async function fetchAndRender() {
+            try {
+                const cutoff = ppDateDaysAgo(FETCH_DAYS_BACK);
+                const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?select=*&shift_date=gte.${cutoff}`;
+                const resp = await fetch(url, { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const rows = await resp.json();
+                const data = {};
+                for (const row of rows) {
+                    let info = row.info_json;
+                    if (typeof info === 'string') { try { info = JSON.parse(info); } catch (e) { info = {}; } }
+                    if (!info || typeof info !== 'object') continue;
+                    (data[row.shift_date] = data[row.shift_date] || {})[row.record_key] = info;
+                }
+                allData = data;
+                const gset = new Set();
+                for (const d in allData) for (const k in allData[d]) { const g = (allData[d][k].group || '').toString().trim(); if (g) gset.add(g); }
+                updateGroupFilter([...gset].sort((a,b)=>a.localeCompare(b)));
+                try {
+                    const cu = `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?select=info_json&shift_date=eq.0000-config&record_key=eq.app_config`;
+                    const cr = await fetch(cu, { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } });
+                    if (cr.ok) { const cj = await cr.json(); let ci = cj[0] && cj[0].info_json; if (typeof ci === 'string') { try { ci = JSON.parse(ci); } catch(e) { ci = {}; } } adminLocks = (ci && ci.locks) || {}; const vb = document.getElementById('ver-badge'); if (vb && ci && ci.version) vb.textContent = 'v' + ci.version; }
+                } catch(e) {}
+                setStatus(true);
+                renderTable();
+            } catch (e) {
+                setStatus(false, e.message);
+            }
+        }
+
+        async function toggleLock(name, device, currentlyLocked) {
+            const key = name + ':' + device;
+            if (!confirm((currentlyLocked ? 'Unlock ' : 'Lock ') + name + "'s laptop?")) return;
+            try {
+                const cu = `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?select=info_json&shift_date=eq.0000-config&record_key=eq.app_config`;
+                const cr = await fetch(cu, { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } });
+                const cj = await cr.json();
+                let ci = cj[0] && cj[0].info_json;
+                if (typeof ci === 'string') { try { ci = JSON.parse(ci); } catch(e) { ci = {}; } }
+                if (!ci || typeof ci !== 'object') ci = {};
+                ci.locks = ci.locks || {};
+                if (currentlyLocked) delete ci.locks[key]; else ci.locks[key] = true;
+                const wu = `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?shift_date=eq.0000-config&record_key=eq.app_config`;
+                const wr = await fetch(wu, { method: 'PATCH', headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ info_json: JSON.stringify(ci) }) });
+                if (!wr.ok) throw new Error('HTTP ' + wr.status);
+                adminLocks = ci.locks;
+                fetchAndRender();
+            } catch (e) { alert('Lock failed: ' + e.message); }
+        }
+
+        function filterByStatus(statusType) { if (currentStatusFilter === statusType) { currentStatusFilter = null; } else { currentStatusFilter = statusType; } const cards = document.querySelectorAll('.card'); cards.forEach(card => card.classList.remove('active')); if (currentStatusFilter) { const activeCard = document.getElementById('card-' + statusType.toLowerCase()); if (activeCard) activeCard.classList.add('active'); } renderTable(); }
+
+        function renderTable() {
+            const startDate = document.getElementById('start-date').value; const endDate = document.getElementById('end-date').value; const query = document.getElementById('search-box').value.trim().toLowerCase(); const groupFilter = document.getElementById('group-filter')?.value || ''; const shiftFilter = document.getElementById('shift-filter')?.value || ''; const table = document.getElementById('staff-table'); let newRows = '';
+            let countOnline = 0, countDuty = 0, countCheckedIn = 0, countBreak = 0, countInactive = 0, countLate = 0; let shownCount = 0, totalCount = 0; const availDates = Object.keys(allData).sort().reverse();
+            for (const dateStr of availDates) {
+                if (startDate && dateStr < startDate) continue; if (endDate && dateStr > endDate) continue;
+                const dailyRecords = allData[dateStr]; let staffList = Object.keys(dailyRecords).map(key => ({ key: key, ...dailyRecords[key] }));
+                staffList.sort((a, b) => { const sA = a.status || ''; const sB = b.status || ''; if (sA !== sB) return sB.localeCompare(sA); return (a.name || '').localeCompare(b.name || ''); });
+                for (const info of staffList) {
+                    totalCount++;
+                    const name = info.name || info.key || ''; const psdId = (info.psd_id || '').toString(); const group = (info.group || '').toString(); const shiftName = (info.shift || '').toString();
+                    if (query) { if (!name.toLowerCase().includes(query) && !psdId.toLowerCase().includes(query)) continue; }
+                    if (groupFilter && group !== groupFilter) continue; if (shiftFilter && shiftName !== shiftFilter) continue;
+                    let current_status = info.status || 'OFFLINE';
+                    // Client-side timeout: no server marks records here, so decide it at display time.
+                    if (!current_status.includes('OFFLINE') && !current_status.includes('BREAK')) {
+                        if (secondsSince(info.last_seen_iso) > TIMEOUT_SECONDS) current_status = '⚠️ OFFLINE (Timeout)';
+                    }
+                    const isOnDuty = !current_status.includes('OFFLINE');
+                    let workStartStr = info.work_start || '-'; if (workStartStr.includes('T')) { workStartStr = workStartStr.split('T')[1].split('.')[0]; } const isCheckedIn = (workStartStr !== '-');
+                    let isLate = false;
+                    if (isCheckedIn) { const shift = (info.shift || '').toString().toUpperCase(); const workSecs = timeToSeconds(workStartStr); if (workSecs !== null) { if (shift === 'NIGHT') { const nightThreshold = timeToSeconds(LATE_NIGHT_THRESHOLD); let adjWorkSecs = workSecs; if (workSecs < 8 * 3600) adjWorkSecs += 24 * 3600; isLate = (nightThreshold !== null) && (adjWorkSecs > nightThreshold); } else { const dayThreshold = timeToSeconds(LATE_DAY_THRESHOLD); isLate = (dayThreshold !== null) && (workSecs > dayThreshold); } } }
+                    const isOnline = (current_status === 'ONLINE'); const isOnBreak = current_status.includes('BREAK'); const isInactive = (info.afk_count > 0);
+                    if (isOnDuty) countDuty++; if (isCheckedIn) countCheckedIn++; if (isLate) countLate++; if (isOnline) countOnline++; if (isOnBreak) countBreak++; if (isInactive) countInactive++;
+                    if (currentStatusFilter === 'ONLINE' && !isOnline) continue; if (currentStatusFilter === 'DUTY' && !isOnDuty) continue; if (currentStatusFilter === 'CHECKEDIN' && !isCheckedIn) continue; if (currentStatusFilter === 'BREAK' && !isOnBreak) continue; if (currentStatusFilter === 'INACTIVE' && !isInactive) continue; if (currentStatusFilter === 'LATE' && !isLate) continue;
+                    let statusClass = 'status-offline'; if (current_status === 'ONLINE') statusClass = 'status-online'; else if (current_status.includes('IDLE')) statusClass = 'status-idle'; else if (current_status.includes('BREAK')) statusClass = 'status-break'; else if (current_status.includes('LOCKED')) statusClass = 'status-locked'; else if (current_status.includes('Timeout')) statusClass = 'status-timeout';
+                    const totalWorkFormatted = formatDuration(info.server_work_seconds || 0);
+                    const safeId = (name + (info.device || '') + shiftName).replace(/[^a-zA-Z0-9]/g, ''); const breakId = `break-${safeId}`; const afkId = `afk-${safeId}`; const sessId = `sess-${safeId}`;
+                    const isBreakOpen = document.getElementById(breakId)?.hasAttribute('open') ? 'open' : ''; const isAfkOpen = document.getElementById(afkId)?.hasAttribute('open') ? 'open' : ''; const isSessOpen = document.getElementById(sessId)?.hasAttribute('open') ? 'open' : '';
+                    let afkHistoryHtml = `<div class="afk-list">${(info.afk_history || []).length > 0 ? info.afk_history.slice().reverse().map(l => `<div>AFK ${escapeHtml(l)}</div>`).join('') : '<i>No AFK</i>'}</div>`;
+                    const activeBreakReason = (info.break_start_reason || '').toString().trim(); const activeBreakLabel = (info.break_start || '').toString().trim(); const activeBreakText = activeBreakLabel ? `Started at ${activeBreakLabel}${activeBreakReason ? ` (${activeBreakReason})` : ''}` : ''; const activeBreakHtml = (isOnBreak && activeBreakText) ? `<div>START ${escapeHtml(activeBreakText)}</div>` : ''; const breakItems = (info.break_history || []).length > 0 ? info.break_history.slice().reverse().map(l => `<div>BRK ${escapeHtml(l)}</div>`).join('') : '<i>No Breaks</i>'; let breakHistoryHtml = `<div class="afk-list">${activeBreakHtml}${breakItems}</div>`;
+                    let sessionHistoryHtml = `<div class="afk-list">${(info.session_history || []).length > 0 ? info.session_history.slice().reverse().map(l => `<div>${escapeHtml(l)}</div>`).join('') : '<i>No logs</i>'}</div>`;
+                    const photoName = info.photo_filename || ''; const photoSrc = photoName ? `${SUPABASE_URL}/storage/v1/object/public/photos/${encodeURIComponent(photoName)}` : ''; const photoTitle = `${name} • ${info.psd_id || ''}`.trim(); const safeTitle = photoTitle.replace(/'/g, "\\'"); const photoHtml = photoName ? `<img class="photo-thumb" src="${photoSrc}" alt="photo" onclick="openPhotoModal('${photoSrc}', '${safeTitle}')">` : `<span class="photo-empty">No photo</span>`;
+                    let displayDate = dateStr; try { if (info.last_seen_iso) { let lastSeenDate = info.last_seen_iso.split('T')[0]; if (lastSeenDate > dateStr) { let parts = lastSeenDate.split('-'); displayDate = `${dateStr} ➔ ${parts[2]}`; } } } catch(e) {}
+                    const device = info.device || ''; const lockKey = name + ':' + device; const isLocked = !!adminLocks[lockKey]; const jsName = String(name).replace(/'/g, "\\'"); const jsDevice = String(device).replace(/'/g, "\\'"); const controlCell = `<td><button class="${isLocked ? 'btn-unlock' : 'btn-lock'}" onclick="toggleLock('${jsName}','${jsDevice}',${isLocked})">${isLocked ? 'UNLOCK' : 'LOCK'}</button></td>`;
+                    newRows += `<tr><td class="cell-date">${displayDate}</td><td><span class="cell-name">${escapeHtml(name)}</span><span class="cell-sub">${escapeHtml(info.device || 'PC')}</span></td><td>${escapeHtml(info.group || '-')}</td><td>${escapeHtml(shiftName || '-')}</td><td class="cell-psd">${escapeHtml(info.psd_id || '-')}</td><td><span class="${statusClass}">${escapeHtml(current_status)}</span></td><td class="photo-cell">${photoHtml}</td><td><details id="${sessId}" ${isSessOpen}><summary>${workStartStr} ▾</summary>${sessionHistoryHtml}</details></td><td><span class="time-work">${totalWorkFormatted}</span></td><td><details id="${breakId}" ${isBreakOpen}><summary class="time-break">${info.total_break_str || '00:00:00'} ▾</summary>${breakHistoryHtml}</details></td><td class="col-center">${info.break_count || 0}</td><td class="col-center">${info.afk_count || 0}</td><td><details id="${afkId}" ${isAfkOpen}><summary>${formatDuration(info.total_afk_seconds || 0)} ▾</summary>${afkHistoryHtml}</details></td>${controlCell}</tr>`;
+                    shownCount++;
+                }
+            }
+            document.getElementById('c-online').innerText = countOnline; document.getElementById('c-duty').innerText = countDuty; document.getElementById('c-checkin').innerText = countCheckedIn; document.getElementById('c-break').innerText = countBreak; document.getElementById('c-inactive').innerText = countInactive; document.getElementById('c-late').innerText = countLate;
+            const scEl = document.getElementById('staff-count'); if (scEl) scEl.innerText = shownCount + ' of ' + totalCount + ' staff';
+            if (table.innerHTML !== newRows) { table.innerHTML = newRows; }
+        }
+
+        function csvCell(v) { let s = String(v == null ? '' : v); if (/[",\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"'; return s; }
+        function downloadCSV() {
+            const start = document.getElementById('start-date').value; const end = document.getElementById('end-date').value;
+            const rows = [['Date','Shift','Staff Name','Device','Group','PSD ID','Status','Check In Time','Daily Work Seconds','Total Break Time','Break Count','AFK Count','Total AFK Time','Session Logs','Break Logs','AFK Logs','Last Seen','Photo Filename']];
+            for (const dateStr of Object.keys(allData).sort().reverse()) {
+                if (start && dateStr < start) continue; if (end && dateStr > end) continue;
+                const rec = allData[dateStr];
+                for (const key in rec) {
+                    const info = rec[key]; const name = info.name || (key.includes('::') ? key.split('::')[0] : key);
+                    rows.push([dateStr, info.shift || '', name, info.device || '', info.group || '', info.psd_id || '', info.status || '', info.work_start || '-', info.server_work_seconds || 0, info.total_break_str || '00:00:00', info.break_count || 0, info.afk_count || 0, info.total_afk_seconds || 0, (info.session_history || []).join(' | '), (info.break_history || []).join(' | '), (info.afk_history || []).join(' | '), info.last_seen || '-', info.photo_filename || '']);
+                }
+            }
+            const csv = rows.map(r => r.map(csvCell).join(',')).join('\n');
+            const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'staff_report.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+        }
+
+        function openPhotoModal(src, title) { const modal = document.getElementById('photo-modal'); const img = document.getElementById('photo-modal-img'); const t = document.getElementById('photo-modal-title'); img.src = src; t.textContent = title || 'Photo'; modal.style.display = 'flex'; }
+        function closePhotoModal() { const modal = document.getElementById('photo-modal'); const img = document.getElementById('photo-modal-img'); modal.style.display = 'none'; img.src = ''; }
+
+        const CONFIG_URL = `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?shift_date=eq.0000-config&record_key=eq.app_config`;
+        async function readConfig() {
+            const r = await fetch(CONFIG_URL + '&select=info_json', { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } });
+            const j = await r.json(); let c = j[0] && j[0].info_json;
+            if (typeof c === 'string') { try { c = JSON.parse(c); } catch(e) { c = {}; } }
+            return (c && typeof c === 'object') ? c : {};
+        }
+        async function openVersionModal() {
+            document.getElementById('ver-msg').textContent = '';
+            document.getElementById('version-modal').style.display = 'flex';
+            try {
+                const c = await readConfig();
+                const v = c.version || '?';
+                document.getElementById('ver-current').textContent = v;
+                document.getElementById('ver-input').value = v;
+            } catch(e) { document.getElementById('ver-current').textContent = '?'; }
+        }
+        function closeVersionModal() { document.getElementById('version-modal').style.display = 'none'; }
+        async function saveVersion() {
+            const v = document.getElementById('ver-input').value.trim();
+            const msg = document.getElementById('ver-msg');
+            if (!v) { msg.style.color = 'var(--red)'; msg.textContent = 'Enter a version number.'; return; }
+            msg.style.color = 'var(--muted)'; msg.textContent = 'Saving…';
+            try {
+                const c = await readConfig();
+                c.version = v;
+                const wr = await fetch(CONFIG_URL, { method:'PATCH', headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type':'application/json', Prefer:'return=minimal' }, body: JSON.stringify({ info_json: JSON.stringify(c) }) });
+                if (!wr.ok) throw new Error('HTTP ' + wr.status);
+                document.getElementById('ver-current').textContent = v;
+                document.getElementById('ver-badge').textContent = 'v' + v;
+                msg.style.color = 'var(--green)'; msg.textContent = '✅ Version set to ' + v + '. Staff apps update on next launch.';
+            } catch(e) { msg.style.color = 'var(--red)'; msg.textContent = 'Failed: ' + e.message; }
+        }
+
+        // ===== Monitor login — verified SERVER-SIDE; no passwords stored in this page =====
+        async function doLogin() {
+            const acc = (document.getElementById('login-acc').value || '').trim();
+            const pw = document.getElementById('login-pw').value || '';
+            const errEl = document.getElementById('login-err');
+            errEl.style.color = '#c0492e';
+            errEl.textContent = 'Checking…';
+            let ok = false, reachable = true;
+            try {
+                const r = await rpc('check_login', { p_account: acc, p_pw: pw });
+                if (r.status === 404) reachable = false;
+                else ok = r.ok && ((await r.json()) === true);
+            } catch (e) { reachable = false; }
+            if (!reachable) { errEl.textContent = 'Login service not set up yet (run the login SQL).'; return; }
+            if (!ok) { errEl.textContent = 'Wrong account or password'; return; }
+            window._dashPw = pw;
+            try { sessionStorage.setItem('dash_auth', '1'); sessionStorage.setItem('dash_pw', pw); } catch (e) {}
+            errEl.textContent = '';
+            startDashboard();
+        }
+
+        // ===== live animated login background (drifting constellation) =====
+        function startLoginBg() {
+            const c = document.getElementById('login-bg');
+            if (!c || c._running) return;
+            c._running = true;
+            const ctx = c.getContext('2d');
+            let w = 0, h = 0, parts = [];
+            function resize() {
+                w = c.width = c.offsetWidth; h = c.height = c.offsetHeight;
+                const target = Math.min(80, Math.max(28, Math.floor(w * h / 20000)));
+                parts = [];
+                for (let i = 0; i < target; i++) parts.push({ x: Math.random()*w, y: Math.random()*h, vx: (Math.random()-0.5)*0.35, vy: (Math.random()-0.5)*0.35 });
+            }
+            resize();
+            window.addEventListener('resize', resize);
+            function tick() {
+                const gate = document.getElementById('login-gate');
+                if (!gate || gate.style.display === 'none') { c._running = false; return; }  // stop after login
+                ctx.clearRect(0, 0, w, h);
+                for (const p of parts) {
+                    p.x += p.vx; p.y += p.vy;
+                    if (p.x < 0 || p.x > w) p.vx *= -1;
+                    if (p.y < 0 || p.y > h) p.vy *= -1;
+                }
+                for (let i = 0; i < parts.length; i++) {
+                    for (let j = i + 1; j < parts.length; j++) {
+                        const a = parts[i], b = parts[j], dx = a.x-b.x, dy = a.y-b.y, d = Math.hypot(dx, dy);
+                        if (d < 130) { ctx.strokeStyle = 'rgba(46,158,99,' + (0.16 * (1 - d/130)) + ')'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+                    }
+                }
+                ctx.fillStyle = 'rgba(255,255,255,0.55)';
+                for (const p of parts) { ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, Math.PI*2); ctx.fill(); }
+                requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        }
+        async function startDashboard() {
+            document.getElementById('login-gate').style.display = 'none';
+            // ---- IP allow-list gate ----
+            const pass = await enforceIpGate();
+            if (!pass) return;                      // ip-gate screen is showing
+            const t = ppTodayStr();
+            document.getElementById('start-date').value = t;
+            document.getElementById('end-date').value = t;
+            fetchAndRender();
+            if (!window._dashTimer) window._dashTimer = setInterval(fetchAndRender, 10000);
+            startIdleWatch();
+        }
+        function logout() {
+            try { sessionStorage.removeItem('dash_auth'); sessionStorage.removeItem('dash_pw'); } catch(e) {}
+            location.reload();
+        }
+        // small helper for Supabase RPC calls
+        async function rpc(fn, body) {
+            return fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+                method: 'POST',
+                headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify(body || {})
+            });
+        }
+
+        // ===== auto logout after inactivity (no mouse / keyboard use) =====
+        const IDLE_LOGOUT_MIN = 30;   // change to 120 for 2 hours, etc.
+        let _idleTimer = null;
+        function resetIdle() {
+            if (_idleTimer) clearTimeout(_idleTimer);
+            _idleTimer = setTimeout(function () {
+                try { sessionStorage.removeItem('dash_auth'); } catch (e) {}
+                alert('Signed out after ' + IDLE_LOGOUT_MIN + ' minutes of inactivity.');
+                location.reload();
+            }, IDLE_LOGOUT_MIN * 60 * 1000);
+        }
+        function startIdleWatch() {
+            if (window._idleWatching) { resetIdle(); return; }
+            window._idleWatching = true;
+            ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(function (ev) {
+                document.addEventListener(ev, resetIdle, { passive: true });
+            });
+            resetIdle();
+        }
+
+        // ===== IP allow-list (deterrent; runs client-side) =====
+        async function fetchMyIp() {
+            const tries = ['https://api.ipify.org?format=json', 'https://api64.ipify.org?format=json'];
+            for (const u of tries) {
+                try { const r = await fetch(u); const j = await r.json(); if (j && j.ip) return String(j.ip).trim(); } catch(e) {}
+            }
+            return '';
+        }
+        // The allow-list lives in a locked Supabase table; the browser NEVER receives
+        // the list. The gate only asks "is this IP allowed?" and gets back true/false.
+        async function getAllowedIps() {
+            // used only by the admin modal; needs the dashboard password
+            try {
+                const r = await rpc('admin_list_ips', { p_pw: window._dashPw || '' });
+                if (!r.ok) return [];
+                const rows = await r.json();
+                return (rows || []).map(x => String(x).trim()).filter(Boolean);
+            } catch(e) { return []; }
+        }
+        async function enforceIpGate() {
+            const ip = window._myIp = await fetchMyIp();
+            let allowed = true;                       // fail-open (never lock out on error / not-set-up)
+            try {
+                const r = await rpc('is_ip_allowed', { p_ip: ip });
+                if (r.ok) allowed = ((await r.json()) === true);
+            } catch(e) {}
+            if (allowed) return true;
+            showIpGate(ip);
+            return false;
+        }
+        function showIpGate(ip) {
+            const g = document.getElementById('ip-gate');
+            document.getElementById('ip-gate-ip').textContent = ip || 'could not be detected';
+            g.style.display = 'flex';
+        }
+
+        // ---- IP management modal ----
+        let ipDraft = [];
+        async function openIpModal() {
+            document.getElementById('ip-msg').textContent = '';
+            document.getElementById('ip-modal').style.display = 'flex';
+            document.getElementById('ip-current').textContent = 'checking…';
+            const [ip, list] = await Promise.all([ window._myIp ? Promise.resolve(window._myIp) : fetchMyIp(), getAllowedIps() ]);
+            window._myIp = ip;
+            document.getElementById('ip-current').textContent = ip || 'unknown';
+            window._ipOriginal = list.slice();
+            ipDraft = list.slice();
+            renderIpChips();
+        }
+        function closeIpModal() { document.getElementById('ip-modal').style.display = 'none'; }
+        function renderIpChips() {
+            const box = document.getElementById('ip-list');
+            if (!ipDraft.length) { box.innerHTML = '<span style="color:var(--faint);font-size:13px;">No IPs added — the dashboard is open to anyone with the password.</span>'; return; }
+            box.innerHTML = ipDraft.map((ip, i) => `<span class="ip-chip">${escapeHtml(ip)}<span class="ip-x" onclick="removeIp(${i})">×</span></span>`).join('');
+        }
+        function addIpValue(v) {
+            v = String(v || '').trim();
+            if (!v) return;
+            if (!ipDraft.includes(v)) ipDraft.push(v);
+            renderIpChips();
+        }
+        function addMyIp() { if (window._myIp) addIpValue(window._myIp); }
+        function addTypedIp() { const el = document.getElementById('ip-input'); addIpValue(el.value); el.value = ''; }
+        function removeIp(i) { ipDraft.splice(i, 1); renderIpChips(); }
+        async function saveIps() {
+            const msg = document.getElementById('ip-msg');
+            if (ipDraft.length && window._myIp && !ipDraft.includes(window._myIp)) {
+                if (!confirm('Your current IP (' + window._myIp + ') is NOT in the list.\nIf you save, you will be locked out from this device.\n\nSave anyway?')) return;
+            }
+            msg.style.color = 'var(--muted)'; msg.textContent = 'Saving…';
+            try {
+                const orig = window._ipOriginal || [];
+                const toAdd = ipDraft.filter(x => !orig.includes(x));
+                const toRemove = orig.filter(x => !ipDraft.includes(x));
+                const pw = window._dashPw || '';
+                for (const ip of toAdd) {
+                    const r = await rpc('admin_add_ip', { p_pw: pw, p_ip: ip });
+                    if (!r.ok) throw new Error('add HTTP ' + r.status);
+                }
+                for (const ip of toRemove) {
+                    const r = await rpc('admin_remove_ip', { p_pw: pw, p_ip: ip });
+                    if (!r.ok) throw new Error('remove HTTP ' + r.status);
+                }
+                window._ipOriginal = ipDraft.slice();
+                msg.style.color = 'var(--green)';
+                msg.textContent = ipDraft.length ? ('✅ Saved. Only these ' + ipDraft.length + ' IP(s) can open the dashboard.') : '✅ Saved. IP restriction is now OFF.';
+            } catch(e) { msg.style.color = 'var(--red)'; msg.textContent = 'Failed: ' + e.message; }
+        }
+
+        window.onload = function() {
+            let authed = false;
+            try { authed = sessionStorage.getItem('dash_auth') === '1'; } catch(e) {}
+            if (authed) { try { window._dashPw = sessionStorage.getItem('dash_pw') || ''; } catch(e) {} startDashboard(); }
+            else { startLoginBg(); document.getElementById('login-acc').focus(); }
+        };
+    </script>
+</head>
+<body>
+    <div id="login-gate" style="position:fixed;inset:0;background:#1d1d1b;display:flex;align-items:center;justify-content:center;z-index:2000;font-family:'Segoe UI',system-ui,sans-serif;">
+        <canvas id="login-bg"></canvas>
+        <div class="login-card" style="background:#fff;border-radius:18px;padding:34px 30px;width:360px;box-shadow:0 24px 70px rgba(0,0,0,.5);text-align:center;">
+            <div style="width:46px;height:46px;border-radius:13px;background:#1d1d1b;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.5rem;margin:0 auto 14px;">S</div>
+            <h2 style="margin:6px 0 4px;color:#1d1d1b;font-size:1.35rem;font-weight:800;">Monitor Login</h2>
+            <p style="font-size:13px;color:#8b8880;margin:0 0 20px;">Sign in to open the dashboard</p>
+            <label class="login-label" for="login-acc">Account</label>
+            <input type="text" id="login-acc" placeholder="Account" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;border:1px solid #e4e2db;border-radius:11px;font-size:1rem;box-sizing:border-box;margin-bottom:14px;background:#f1efe9;">
+            <label class="login-label" for="login-pw">Password</label>
+            <input type="password" id="login-pw" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;border:1px solid #e4e2db;border-radius:11px;font-size:1rem;box-sizing:border-box;margin-bottom:10px;background:#f1efe9;">
+            <div id="login-err" style="color:#c0492e;font-size:13px;min-height:16px;margin-bottom:10px;"></div>
+            <button onclick="doLogin()" style="width:100%;padding:12px;border:none;border-radius:11px;background:#1d1d1b;color:#fff;font-weight:700;font-size:1rem;cursor:pointer;">Sign In</button>
+        </div>
+    </div>
+    <div id="ip-gate" style="position:fixed;inset:0;background:#1d1d1b;display:none;align-items:center;justify-content:center;z-index:2000;font-family:'Segoe UI',system-ui,sans-serif;">
+        <div style="background:#fff;border-radius:18px;padding:34px 30px;width:380px;box-shadow:0 24px 70px rgba(0,0,0,.5);text-align:center;">
+            <div style="width:46px;height:46px;border-radius:13px;background:#c0492e;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.4rem;margin:0 auto 14px;">!</div>
+            <h2 style="margin:6px 0 4px;color:#1d1d1b;font-size:1.3rem;font-weight:800;">Access restricted</h2>
+            <p style="font-size:13.5px;color:#8b8880;margin:0 0 6px;line-height:1.6;">This dashboard is limited to approved locations.<br>Your IP address is not on the allowed list.</p>
+            <div style="font-family:'Consolas',monospace;font-weight:700;color:#1d1d1b;background:#f1efe9;border:1px solid #e4e2db;border-radius:10px;padding:9px;margin:12px 0 16px;" id="ip-gate-ip">—</div>
+            <p style="font-size:12.5px;color:#a8a59d;margin:0 0 18px;">Ask the administrator to add this IP under <b>IP access</b>.</p>
+            <button onclick="logout()" style="width:100%;padding:12px;border:none;border-radius:11px;background:#1d1d1b;color:#fff;font-weight:700;font-size:1rem;cursor:pointer;">Log out</button>
+        </div>
+    </div>
+    <div class="container">
+        <div class="header">
+            <div class="brand"><div class="logo">S</div><h1>Staff Monitor</h1></div>
+            <span id="conn">Connecting…</span>
+            <div class="header-actions">
+                <button class="btn-neutral" onclick="fetchAndRender()">Refresh</button>
+                <button class="btn-neutral" onclick="openVersionModal()">App version<span class="tag" id="ver-badge"></span></button>
+                <button class="btn-neutral" onclick="openIpModal()">IP access</button>
+                <button class="btn-neutral" onclick="downloadCSV()">Export CSV</button>
+                <button class="btn-neutral" onclick="logout()">Log out</button>
+            </div>
+        </div>
+        <div class="status-cards">
+            <div class="card" id="card-online" onclick="filterByStatus('ONLINE')"><div class="card-title"><span class="dot c-online"></span>Online now</div><div class="card-value" id="c-online">0</div></div>
+            <div class="card" id="card-duty" onclick="filterByStatus('DUTY')"><div class="card-title"><span class="dot c-duty"></span>On duty</div><div class="card-value" id="c-duty">0</div></div>
+            <div class="card" id="card-checkedin" onclick="filterByStatus('CHECKEDIN')"><div class="card-title"><span class="dot c-checkin"></span>Checked in</div><div class="card-value" id="c-checkin">0</div></div>
+            <div class="card" id="card-break" onclick="filterByStatus('BREAK')"><div class="card-title"><span class="dot c-break"></span>On break</div><div class="card-value" id="c-break">0</div></div>
+            <div class="card" id="card-inactive" onclick="filterByStatus('INACTIVE')"><div class="card-title"><span class="dot c-inactive"></span>Had inactivity</div><div class="card-value" id="c-inactive">0</div></div>
+            <div class="card" id="card-late" onclick="filterByStatus('LATE')"><div class="card-title"><span class="dot c-late"></span>Late check-in</div><div class="card-value" id="c-late">0</div></div>
+        </div>
+        <div class="filters">
+            <input type="text" id="search-box" placeholder="Search name or PSD ID" oninput="renderTable()">
+            <label>Group</label><select id="group-filter" onchange="renderTable()"><option value="">All Groups</option></select>
+            <input type="hidden" id="shift-filter" value="">
+            <div class="seg" id="shift-seg">
+                <button class="seg-btn active" onclick="setShift(this,'')">All</button>
+                <button class="seg-btn" onclick="setShift(this,'DAY')">Day</button>
+                <button class="seg-btn" onclick="setShift(this,'NIGHT')">Night</button>
+            </div>
+            <label>From</label><input type="date" id="start-date" onchange="renderTable()">
+            <label>To</label><input type="date" id="end-date" onchange="renderTable()">
+            <span class="staff-count" id="staff-count"></span>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead><tr><th>Date</th><th>Staff</th><th>Group</th><th>Shift</th><th>PSD ID</th><th>Status</th><th>Photo</th><th>Check In</th><th>Work</th><th>Break</th><th>Brk #</th><th>Afk #</th><th>Afk Time</th><th>Control</th></tr></thead>
+                <tbody id="staff-table"></tbody>
+            </table>
+        </div>
+    </div>
+    <div id="version-modal" class="modal-backdrop" onclick="closeVersionModal()"><div class="modal" onclick="event.stopPropagation()" style="max-width:470px;text-align:left;">
+        <h3 style="margin-top:0;color:#1d1d1b;font-weight:800;">App Version &amp; Update</h3>
+        <p style="font-size:13px;color:#8b8880;margin:6px 0 16px;">Staff apps auto-update when this number changes.</p>
+        <div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:14px;">
+            <div><div style="font-size:11px;color:#a8a59d;font-weight:700;">CURRENT</div><div id="ver-current" style="font-size:1.8rem;font-weight:800;color:#1d1d1b;">—</div></div>
+            <div style="flex:1;"><div style="font-size:11px;color:#a8a59d;font-weight:700;margin-bottom:4px;">SET TO</div><input type="text" id="ver-input" style="width:100%;padding:10px 12px;border:1px solid #e4e2db;border-radius:10px;font-size:1rem;box-sizing:border-box;background:#f1efe9;"></div>
+        </div>
+        <div style="background:#f1efe9;border:1px solid #e9e7e1;border-radius:11px;padding:12px 14px;font-size:12px;color:#8b8880;line-height:1.7;margin-bottom:14px;">
+            <b style="color:#1d1d1b;">To release a new version:</b><br>
+            1. Publish the new <b>dashboard.exe</b> to GitHub (run <b>upload_app.bat</b>)<br>
+            2. Enter the new version number here → <b>Update Version</b><br>
+            3. Staff apps auto-download it the next time they open
+        </div>
+        <div id="ver-msg" style="font-size:13px;margin-bottom:10px;min-height:16px;"></div>
+        <div class="modal-actions" style="display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn-neutral" onclick="closeVersionModal()">Cancel</button>
+            <button class="btn-dark" onclick="saveVersion()">Update Version</button>
+        </div>
+    </div></div>
+    <div id="ip-modal" class="modal-backdrop" onclick="closeIpModal()"><div class="modal" onclick="event.stopPropagation()" style="max-width:500px;text-align:left;">
+        <h3 style="margin-top:0;color:#1d1d1b;font-weight:800;">IP Access Control</h3>
+        <p style="font-size:13px;color:#8b8880;margin:6px 0 16px;">Only these IP addresses can open the dashboard. Leave the list empty to allow anyone with the password.</p>
+        <div style="display:flex;align-items:center;gap:12px;background:#f1efe9;border:1px solid #e9e7e1;border-radius:11px;padding:12px 14px;margin-bottom:14px;">
+            <div style="flex:1;"><div style="font-size:11px;color:#a8a59d;font-weight:700;">YOUR CURRENT IP</div><div id="ip-current" style="font-size:1.05rem;font-weight:800;color:#1d1d1b;font-family:'Consolas',monospace;">—</div></div>
+            <button class="btn-dark" onclick="addMyIp()">Allow my IP</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+            <input type="text" id="ip-input" placeholder="Add another IP (e.g. 203.0.113.5)" onkeydown="if(event.key==='Enter')addTypedIp()" style="flex:1;padding:9px 12px;border:1px solid #e4e2db;border-radius:10px;font-size:14px;box-sizing:border-box;background:#f1efe9;font-family:'Consolas',monospace;">
+            <button class="btn-neutral" onclick="addTypedIp()">Add</button>
+        </div>
+        <div style="font-size:11px;color:#a8a59d;font-weight:700;margin-bottom:8px;">ALLOWED IPs</div>
+        <div id="ip-list" style="margin-bottom:14px;min-height:28px;"></div>
+        <div style="background:#f6edd6;border:1px solid #ecdfbf;border-radius:11px;padding:11px 13px;font-size:12px;color:#8a6d2f;line-height:1.6;margin-bottom:14px;">
+            <b>Note:</b> office Wi-Fi usually has one fixed public IP; home/mobile internet can change, which may require re-adding. This check runs in the browser as a deterrent alongside the password.
+        </div>
+        <div id="ip-msg" style="font-size:13px;margin-bottom:10px;min-height:16px;"></div>
+        <div class="modal-actions">
+            <button class="btn-neutral" onclick="closeIpModal()">Cancel</button>
+            <button class="btn-dark" onclick="saveIps()">Save</button>
+        </div>
+    </div></div>
+    <div id="photo-modal" class="modal-backdrop" onclick="closePhotoModal()"><div class="modal" onclick="event.stopPropagation()">
+        <div id="photo-modal-title" class="photo-modal-title">Photo</div>
+        <img id="photo-modal-img" class="photo-modal-img" src="" alt="photo">
+        <div class="modal-actions" style="margin-top:12px;"><button class="btn-neutral" onclick="closePhotoModal()">Close</button></div>
+    </div></div>
+</body>
+</html>
