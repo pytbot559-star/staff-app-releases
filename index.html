@@ -364,9 +364,8 @@
         }
         async function startDashboard() {
             document.getElementById('login-gate').style.display = 'none';
-            // ---- IP allow-list gate ----
-            const pass = await enforceIpGate();
-            if (!pass) return;                      // ip-gate screen is showing
+            // ---- IP allow-list gate DISABLED: account+password login is the only access control
+            // (removed because dynamic home/VPN IPs kept locking out the admin) ----
             const t = ppTodayStr();
             document.getElementById('start-date').value = t;
             document.getElementById('end-date').value = t;
