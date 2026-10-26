@@ -163,8 +163,14 @@
 
         async function fetchAndRender() {
             try {
-                const cutoff = ppDateDaysAgo(FETCH_DAYS_BACK);
-                const url = `${SERVER_URL}/${SUPABASE_TABLE}?select=*&shift_date=gte.${cutoff}`;
+                // Fetch window follows the From/To pickers: default = last FETCH_DAYS_BACK days,
+                // but if a user picks an older From date, pull from there so history loads on demand.
+                const defaultCutoff = ppDateDaysAgo(FETCH_DAYS_BACK);
+                const startVal = document.getElementById('start-date').value;
+                const endVal = document.getElementById('end-date').value;
+                const fromDate = (startVal && startVal < defaultCutoff) ? startVal : defaultCutoff;
+                let url = `${SERVER_URL}/${SUPABASE_TABLE}?select=*&shift_date=gte.${fromDate}`;
+                if (endVal) url += `&shift_date=lte.${endVal}`;
                 const resp = await fetch(url, { headers: {  } });
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 const rows = await resp.json();
@@ -557,8 +563,8 @@
                 <button class="seg-btn" onclick="setShift(this,'DAY')">Day</button>
                 <button class="seg-btn" onclick="setShift(this,'NIGHT')">Night</button>
             </div>
-            <label>From</label><input type="date" id="start-date" onchange="renderTable()">
-            <label>To</label><input type="date" id="end-date" onchange="renderTable()">
+            <label>From</label><input type="date" id="start-date" onchange="fetchAndRender()">
+            <label>To</label><input type="date" id="end-date" onchange="fetchAndRender()">
             <span class="staff-count" id="staff-count"></span>
         </div>
         <div class="table-wrapper">
