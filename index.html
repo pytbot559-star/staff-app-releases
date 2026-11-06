@@ -122,7 +122,7 @@
         const SERVER_URL = "https://e-serverbkp6.tail5b4ffa.ts.net";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVzcmp6ZXRoZHdkcWVlbnpxcXFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MDUwNDQsImV4cCI6MjA5MDE4MTA0NH0.yFjsiTPQLK5bJFJN2bRnNYGA4Bgg7Femb00QnXEFkLQ";
         const SUPABASE_TABLE = "staff_dashboard";
-        const FETCH_DAYS_BACK = 3;
+        const FETCH_DAYS_BACK = 1;   // live view = today + yesterday (light); older history loads on demand via the date pickers
         const TIMEOUT_SECONDS = 120;      // match server: mark OFFLINE after 2 min of silence
         const TZ_OFFSET_MIN = 7 * 60;     // Asia/Phnom_Penh = UTC+7 (no daylight saving)
         // =====================================================================
@@ -161,7 +161,12 @@
 
         function updateGroupFilter(groups) { const newGroupsJson = JSON.stringify(groups); if (newGroupsJson === currentGroupsJson) return; currentGroupsJson = newGroupsJson; const select = document.getElementById('group-filter'); if (!select) return; const current = select.value; const options = ['<option value="">All Groups</option>']; for (const g of groups) { options.push(`<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`); } select.innerHTML = options.join(''); select.value = current; }
 
+        let _fetchInFlight = false;
         async function fetchAndRender() {
+            if (_fetchInFlight) return;            // don't stack big requests through the funnel
+            _fetchInFlight = true;
+            const _ctrl = new AbortController();
+            const _killer = setTimeout(() => _ctrl.abort(), 25000);  // abort a stalled request after 25s
             try {
                 // Fetch window follows the From/To pickers: default = last FETCH_DAYS_BACK days,
                 // but if a user picks an older From date, pull from there so history loads on demand.
@@ -171,7 +176,7 @@
                 const fromDate = (startVal && startVal < defaultCutoff) ? startVal : defaultCutoff;
                 let url = `${SERVER_URL}/${SUPABASE_TABLE}?select=*&shift_date=gte.${fromDate}`;
                 if (endVal) url += `&shift_date=lte.${endVal}`;
-                const resp = await fetch(url, { headers: {  } });
+                const resp = await fetch(url, { headers: {  }, signal: _ctrl.signal });
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 const rows = await resp.json();
                 const data = {};
@@ -193,7 +198,10 @@
                 setStatus(true);
                 renderTable();
             } catch (e) {
-                setStatus(false, e.message);
+                setStatus(false, e.name === 'AbortError' ? 'timed out — try a smaller date range' : e.message);
+            } finally {
+                clearTimeout(_killer);
+                _fetchInFlight = false;
             }
         }
 
@@ -376,7 +384,7 @@
             document.getElementById('start-date').value = t;
             document.getElementById('end-date').value = t;
             fetchAndRender();
-            if (!window._dashTimer) window._dashTimer = setInterval(fetchAndRender, 10000);
+            if (!window._dashTimer) window._dashTimer = setInterval(fetchAndRender, 20000);
             startIdleWatch();
         }
         function logout() {
