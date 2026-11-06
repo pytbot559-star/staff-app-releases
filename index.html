@@ -162,7 +162,7 @@
         function updateGroupFilter(groups) { const newGroupsJson = JSON.stringify(groups); if (newGroupsJson === currentGroupsJson) return; currentGroupsJson = newGroupsJson; const select = document.getElementById('group-filter'); if (!select) return; const current = select.value; const options = ['<option value="">All Groups</option>']; for (const g of groups) { options.push(`<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`); } select.innerHTML = options.join(''); select.value = current; }
 
         let _fetchInFlight = false;
-        async function fetchAndRender() {
+        async function fetchAndRender(forceFull = false) {
             if (_fetchInFlight) return;            // don't stack big requests through the funnel
             _fetchInFlight = true;
             const _ctrl = new AbortController();
@@ -174,16 +174,26 @@
                 const startVal = document.getElementById('start-date').value;
                 const endVal = document.getElementById('end-date').value;
                 const fromDate = (startVal && startVal < defaultCutoff) ? startVal : defaultCutoff;
-                let url = `${SERVER_URL}/${SUPABASE_TABLE}?select=*&shift_date=gte.${fromDate}`;
+                // LEAN by default = only the quick-look columns (tiny + fast through the funnel, so the
+                // live view never times out). Pull FULL records (break/AFK/photo history) only when
+                // viewing history (older From date) or when Refresh is clicked.
+                const full = forceFull || (startVal && startVal < ppTodayStr());
+                const sel = full ? '*' : 'record_key,shift_date,s_name,s_status,s_group,s_shift,s_checkin,s_work,s_lastseen';
+                let url = `${SERVER_URL}/${SUPABASE_TABLE}?select=${sel}&shift_date=gte.${fromDate}`;
                 if (endVal) url += `&shift_date=lte.${endVal}`;
                 const resp = await fetch(url, { headers: {  }, signal: _ctrl.signal });
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 const rows = await resp.json();
                 const data = {};
                 for (const row of rows) {
-                    let info = row.info_json;
-                    if (typeof info === 'string') { try { info = JSON.parse(info); } catch (e) { info = {}; } }
-                    if (!info || typeof info !== 'object') continue;
+                    let info;
+                    if (full) {
+                        info = row.info_json;
+                        if (typeof info === 'string') { try { info = JSON.parse(info); } catch (e) { info = {}; } }
+                        if (!info || typeof info !== 'object') continue;
+                    } else {
+                        info = { name: row.s_name, status: row.s_status, group: row.s_group, shift: row.s_shift, work_start: row.s_checkin, server_work_seconds: row.s_work, last_seen_iso: row.s_lastseen };
+                    }
                     (data[row.shift_date] = data[row.shift_date] || {})[row.record_key] = info;
                 }
                 allData = data;
@@ -547,7 +557,7 @@
             <div class="brand"><div class="logo">S</div><h1>Staff Monitor</h1></div>
             <span id="conn">Connecting…</span>
             <div class="header-actions">
-                <button class="btn-neutral" onclick="fetchAndRender()">Refresh</button>
+                <button class="btn-neutral" onclick="fetchAndRender(true)">Refresh (full detail)</button>
                 <button class="btn-neutral" onclick="openVersionModal()">App version<span class="tag" id="ver-badge"></span></button>
                 <button class="btn-neutral" onclick="openIpModal()">IP access</button>
                 <button class="btn-neutral" onclick="downloadCSV()">Export CSV</button>
