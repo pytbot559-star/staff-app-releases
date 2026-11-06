@@ -119,10 +119,9 @@
     <script>
         // ====== CONFIG — reads directly from Supabase, no PythonAnywhere ======
         const SUPABASE_URL = "https://esrjzethdwdqeenzqqqs.supabase.co";
-        const SERVER_URL = "https://e-serverbkp6.tail5b4ffa.ts.net";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVzcmp6ZXRoZHdkcWVlbnpxcXFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MDUwNDQsImV4cCI6MjA5MDE4MTA0NH0.yFjsiTPQLK5bJFJN2bRnNYGA4Bgg7Femb00QnXEFkLQ";
         const SUPABASE_TABLE = "staff_dashboard";
-        const FETCH_DAYS_BACK = 1;   // live view = today + yesterday (light); older history loads on demand via the date pickers
+        const FETCH_DAYS_BACK = 3;
         const TIMEOUT_SECONDS = 120;      // match server: mark OFFLINE after 2 min of silence
         const TZ_OFFSET_MIN = 7 * 60;     // Asia/Phnom_Penh = UTC+7 (no daylight saving)
         // =====================================================================
@@ -161,39 +160,18 @@
 
         function updateGroupFilter(groups) { const newGroupsJson = JSON.stringify(groups); if (newGroupsJson === currentGroupsJson) return; currentGroupsJson = newGroupsJson; const select = document.getElementById('group-filter'); if (!select) return; const current = select.value; const options = ['<option value="">All Groups</option>']; for (const g of groups) { options.push(`<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`); } select.innerHTML = options.join(''); select.value = current; }
 
-        let _fetchInFlight = false;
-        async function fetchAndRender(forceFull = false) {
-            if (_fetchInFlight) return;            // don't stack big requests through the funnel
-            _fetchInFlight = true;
-            const _ctrl = new AbortController();
-            const _killer = setTimeout(() => _ctrl.abort(), 25000);  // abort a stalled request after 25s
+        async function fetchAndRender() {
             try {
-                // Fetch window follows the From/To pickers: default = last FETCH_DAYS_BACK days,
-                // but if a user picks an older From date, pull from there so history loads on demand.
-                const defaultCutoff = ppDateDaysAgo(FETCH_DAYS_BACK);
-                const startVal = document.getElementById('start-date').value;
-                const endVal = document.getElementById('end-date').value;
-                const fromDate = (startVal && startVal < defaultCutoff) ? startVal : defaultCutoff;
-                // LEAN by default = only the quick-look columns (tiny + fast through the funnel, so the
-                // live view never times out). Pull FULL records (break/AFK/photo history) only when
-                // viewing history (older From date) or when Refresh is clicked.
-                const full = forceFull || (startVal && startVal < ppTodayStr());
-                const sel = full ? '*' : 'record_key,shift_date,s_name,s_status,s_group,s_shift,s_checkin,s_work,s_lastseen';
-                let url = `${SERVER_URL}/${SUPABASE_TABLE}?select=${sel}&shift_date=gte.${fromDate}`;
-                if (endVal) url += `&shift_date=lte.${endVal}`;
-                const resp = await fetch(url, { headers: {  }, signal: _ctrl.signal });
+                const cutoff = ppDateDaysAgo(FETCH_DAYS_BACK);
+                const url = `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?select=*&shift_date=gte.${cutoff}`;
+                const resp = await fetch(url, { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } });
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 const rows = await resp.json();
                 const data = {};
                 for (const row of rows) {
-                    let info;
-                    if (full) {
-                        info = row.info_json;
-                        if (typeof info === 'string') { try { info = JSON.parse(info); } catch (e) { info = {}; } }
-                        if (!info || typeof info !== 'object') continue;
-                    } else {
-                        info = { name: row.s_name, status: row.s_status, group: row.s_group, shift: row.s_shift, work_start: row.s_checkin, server_work_seconds: row.s_work, last_seen_iso: row.s_lastseen };
-                    }
+                    let info = row.info_json;
+                    if (typeof info === 'string') { try { info = JSON.parse(info); } catch (e) { info = {}; } }
+                    if (!info || typeof info !== 'object') continue;
                     (data[row.shift_date] = data[row.shift_date] || {})[row.record_key] = info;
                 }
                 allData = data;
@@ -201,17 +179,14 @@
                 for (const d in allData) for (const k in allData[d]) { const g = (allData[d][k].group || '').toString().trim(); if (g) gset.add(g); }
                 updateGroupFilter([...gset].sort((a,b)=>a.localeCompare(b)));
                 try {
-                    const cu = `${SERVER_URL}/${SUPABASE_TABLE}?select=info_json&shift_date=eq.0000-config&record_key=eq.app_config`;
-                    const cr = await fetch(cu, { headers: {  } });
+                    const cu = `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?select=info_json&shift_date=eq.0000-config&record_key=eq.app_config`;
+                    const cr = await fetch(cu, { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } });
                     if (cr.ok) { const cj = await cr.json(); let ci = cj[0] && cj[0].info_json; if (typeof ci === 'string') { try { ci = JSON.parse(ci); } catch(e) { ci = {}; } } adminLocks = (ci && ci.locks) || {}; const vb = document.getElementById('ver-badge'); if (vb && ci && ci.version) vb.textContent = 'v' + ci.version; }
                 } catch(e) {}
                 setStatus(true);
                 renderTable();
             } catch (e) {
-                setStatus(false, e.name === 'AbortError' ? 'timed out — try a smaller date range' : e.message);
-            } finally {
-                clearTimeout(_killer);
-                _fetchInFlight = false;
+                setStatus(false, e.message);
             }
         }
 
@@ -219,16 +194,16 @@
             const key = name + ':' + device;
             if (!confirm((currentlyLocked ? 'Unlock ' : 'Lock ') + name + "'s laptop?")) return;
             try {
-                const cu = `${SERVER_URL}/${SUPABASE_TABLE}?select=info_json&shift_date=eq.0000-config&record_key=eq.app_config`;
-                const cr = await fetch(cu, { headers: {  } });
+                const cu = `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?select=info_json&shift_date=eq.0000-config&record_key=eq.app_config`;
+                const cr = await fetch(cu, { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } });
                 const cj = await cr.json();
                 let ci = cj[0] && cj[0].info_json;
                 if (typeof ci === 'string') { try { ci = JSON.parse(ci); } catch(e) { ci = {}; } }
                 if (!ci || typeof ci !== 'object') ci = {};
                 ci.locks = ci.locks || {};
                 if (currentlyLocked) delete ci.locks[key]; else ci.locks[key] = true;
-                const wu = `${SERVER_URL}/${SUPABASE_TABLE}?shift_date=eq.0000-config&record_key=eq.app_config`;
-                const wr = await fetch(wu, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ info_json: JSON.stringify(ci) }) });
+                const wu = `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?shift_date=eq.0000-config&record_key=eq.app_config`;
+                const wr = await fetch(wu, { method: 'PATCH', headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ info_json: JSON.stringify(ci) }) });
                 if (!wr.ok) throw new Error('HTTP ' + wr.status);
                 adminLocks = ci.locks;
                 fetchAndRender();
@@ -300,9 +275,9 @@
         function openPhotoModal(src, title) { const modal = document.getElementById('photo-modal'); const img = document.getElementById('photo-modal-img'); const t = document.getElementById('photo-modal-title'); img.src = src; t.textContent = title || 'Photo'; modal.style.display = 'flex'; }
         function closePhotoModal() { const modal = document.getElementById('photo-modal'); const img = document.getElementById('photo-modal-img'); modal.style.display = 'none'; img.src = ''; }
 
-        const CONFIG_URL = `${SERVER_URL}/${SUPABASE_TABLE}?shift_date=eq.0000-config&record_key=eq.app_config`;
+        const CONFIG_URL = `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?shift_date=eq.0000-config&record_key=eq.app_config`;
         async function readConfig() {
-            const r = await fetch(CONFIG_URL + '&select=info_json', { headers: {  } });
+            const r = await fetch(CONFIG_URL + '&select=info_json', { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } });
             const j = await r.json(); let c = j[0] && j[0].info_json;
             if (typeof c === 'string') { try { c = JSON.parse(c); } catch(e) { c = {}; } }
             return (c && typeof c === 'object') ? c : {};
@@ -326,7 +301,7 @@
             try {
                 const c = await readConfig();
                 c.version = v;
-                const wr = await fetch(CONFIG_URL, { method:'PATCH', headers: { 'Content-Type':'application/json', Prefer:'return=minimal' }, body: JSON.stringify({ info_json: JSON.stringify(c) }) });
+                const wr = await fetch(CONFIG_URL, { method:'PATCH', headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type':'application/json', Prefer:'return=minimal' }, body: JSON.stringify({ info_json: JSON.stringify(c) }) });
                 if (!wr.ok) throw new Error('HTTP ' + wr.status);
                 document.getElementById('ver-current').textContent = v;
                 document.getElementById('ver-badge').textContent = 'v' + v;
@@ -388,13 +363,12 @@
         }
         async function startDashboard() {
             document.getElementById('login-gate').style.display = 'none';
-            // ---- IP allow-list gate DISABLED: account+password login is the only access control
-            // (removed because dynamic home/VPN IPs kept locking out the admin) ----
+            // ---- IP allow-list gate DISABLED: account+password login is the only access control ----
             const t = ppTodayStr();
             document.getElementById('start-date').value = t;
             document.getElementById('end-date').value = t;
             fetchAndRender();
-            if (!window._dashTimer) window._dashTimer = setInterval(fetchAndRender, 20000);
+            if (!window._dashTimer) window._dashTimer = setInterval(fetchAndRender, 10000);
             startIdleWatch();
         }
         function logout() {
@@ -403,9 +377,9 @@
         }
         // small helper for Supabase RPC calls
         async function rpc(fn, body) {
-            return fetch(`${SERVER_URL}/rpc/${fn}`, {
+            return fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
                 body: JSON.stringify(body || {})
             });
         }
@@ -557,7 +531,7 @@
             <div class="brand"><div class="logo">S</div><h1>Staff Monitor</h1></div>
             <span id="conn">Connecting…</span>
             <div class="header-actions">
-                <button class="btn-neutral" onclick="fetchAndRender(true)">Refresh (full detail)</button>
+                <button class="btn-neutral" onclick="fetchAndRender()">Refresh</button>
                 <button class="btn-neutral" onclick="openVersionModal()">App version<span class="tag" id="ver-badge"></span></button>
                 <button class="btn-neutral" onclick="openIpModal()">IP access</button>
                 <button class="btn-neutral" onclick="downloadCSV()">Export CSV</button>
@@ -581,8 +555,8 @@
                 <button class="seg-btn" onclick="setShift(this,'DAY')">Day</button>
                 <button class="seg-btn" onclick="setShift(this,'NIGHT')">Night</button>
             </div>
-            <label>From</label><input type="date" id="start-date" onchange="fetchAndRender()">
-            <label>To</label><input type="date" id="end-date" onchange="fetchAndRender()">
+            <label>From</label><input type="date" id="start-date" onchange="renderTable()">
+            <label>To</label><input type="date" id="end-date" onchange="renderTable()">
             <span class="staff-count" id="staff-count"></span>
         </div>
         <div class="table-wrapper">
